@@ -110,7 +110,7 @@ fn test_asl_absolute() {
     cpu.load_rom(&[0x0E, 0x04, 0x80, 0x00, 0b1110_1010]).unwrap();
     cpu.reset();
     cpu.run().unwrap();
-    assert_eq!(cpu.memory.read(0x8004), 0b1110_1010 << 1);
+    assert_eq!(cpu.memory.read(0x8004).unwrap(), 0b1110_1010 << 1);
     assert!(!cpu.status_flags.get_zero());
     assert!(cpu.status_flags.get_negative());
     assert!(cpu.status_flags.get_carry());
@@ -143,7 +143,7 @@ fn test_bit_relative() {
     cpu.register_a = 0b1010_1010;
     cpu.memory.write(0x00ab, 0b1100_1100).unwrap();
     cpu.run().unwrap();
-    assert_eq!(cpu.memory.read(0x00ab), 0b1100_1100);
+    assert_eq!(cpu.memory.read(0x00ab).unwrap(), 0b1100_1100);
     assert!(!cpu.status_flags.get_zero());
     assert!(cpu.status_flags.get_negative());
     assert!(cpu.status_flags.get_negative());
@@ -157,7 +157,7 @@ fn test_bit_absolute() {
     cpu.register_a = 0b0011_0011;
     cpu.memory.write(0xabcd, 0b1100_1100).unwrap();
     cpu.run().unwrap();
-    assert_eq!(cpu.memory.read(0xabcd), 0b1100_1100);
+    assert_eq!(cpu.memory.read(0xabcd).unwrap(), 0b1100_1100);
     assert!(cpu.status_flags.get_zero());
     assert!(cpu.status_flags.get_negative());
     assert!(cpu.status_flags.get_negative());
@@ -184,7 +184,7 @@ fn test_decrements() {
     cpu.run().unwrap();
     assert!(!cpu.status_flags.get_zero());
     assert!(cpu.status_flags.get_negative());
-    assert_eq!(cpu.memory.read(0x0000), 0x0f);
+    assert_eq!(cpu.memory.read(0x0000).unwrap(), 0x0f);
     assert_eq!(cpu.register_x, 0xff);
     assert_eq!(cpu.register_y, 0xff);
 }
@@ -269,7 +269,7 @@ fn test_lsr_absolute() {
     cpu.load_rom(&[0x4E, 0x04, 0x80, 0x00, 0b1110_1011]).unwrap();
     cpu.reset();
     cpu.run().unwrap();
-    assert_eq!(cpu.memory.read(0x8004), 0b1110_1010 >> 1);
+    assert_eq!(cpu.memory.read(0x8004).unwrap(), 0b1110_1010 >> 1);
     assert!(!cpu.status_flags.get_zero());
     assert!(!cpu.status_flags.get_negative());
     assert!(cpu.status_flags.get_carry());
@@ -293,7 +293,7 @@ fn test_pha() {
     cpu.register_a = 0x12;
     cpu.run().unwrap();
     assert_eq!(cpu.register_sp, 0xFF - 1);
-    assert_eq!(cpu.memory.read(0x1FF), 0x12);
+    assert_eq!(cpu.memory.read(0x1FF).unwrap(), 0x12);
 }
 
 #[test]
@@ -304,7 +304,7 @@ fn test_php() {
     cpu.status_flags.status = 0b1000_1010;
     cpu.run().unwrap();
     assert_eq!(cpu.register_sp, 0xFF - 1);
-    assert_eq!(cpu.memory.read(0x1FF), 0b1011_1010);
+    assert_eq!(cpu.memory.read(0x1FF).unwrap(), 0b1011_1010);
 }
 
 #[test]
@@ -350,7 +350,7 @@ fn test_rol_absolute() {
     cpu.load_rom(&[0x2E, 0x04, 0x80, 0x00, 0b1110_1011]).unwrap();
     cpu.reset();
     cpu.run().unwrap();
-    assert_eq!(cpu.memory.read(0x8004), 0b1110_1011_u8.rotate_left(1));
+    assert_eq!(cpu.memory.read(0x8004).unwrap(), 0b1110_1011_u8.rotate_left(1));
     assert!(!cpu.status_flags.get_zero());
     assert!(cpu.status_flags.get_negative());
     assert!(cpu.status_flags.get_carry());
@@ -375,7 +375,7 @@ fn test_ror_absolute() {
     cpu.load_rom(&[0x6E, 0x04, 0x80, 0x00, 0b1110_1011]).unwrap();
     cpu.reset();
     cpu.run().unwrap();
-    assert_eq!(cpu.memory.read(0x8004), 0b1110_1011_u8.rotate_right(1));
+    assert_eq!(cpu.memory.read(0x8004).unwrap(), 0b1110_1011_u8.rotate_right(1));
     assert!(!cpu.status_flags.get_zero());
     assert!(cpu.status_flags.get_negative());
     assert!(cpu.status_flags.get_carry());
@@ -428,7 +428,7 @@ fn test_sta() {
     cpu.reset();
     cpu.register_a = 0x12;
     cpu.run().unwrap();
-    assert_eq!(cpu.memory.read(0xab), 0x12);
+    assert_eq!(cpu.memory.read(0xab).unwrap(), 0x12);
 }
 
 #[test]
@@ -438,7 +438,7 @@ fn test_stx() {
     cpu.reset();
     cpu.register_x = 0x12;
     cpu.run().unwrap();
-    assert_eq!(cpu.memory.read(0xab), 0x12);
+    assert_eq!(cpu.memory.read(0xab).unwrap(), 0x12);
 }
 
 #[test]
@@ -448,7 +448,7 @@ fn test_sty() {
     cpu.reset();
     cpu.register_y = 0x12;
     cpu.run().unwrap();
-    assert_eq!(cpu.memory.read(0xab), 0x12);
+    assert_eq!(cpu.memory.read(0xab).unwrap(), 0x12);
 }
 
 

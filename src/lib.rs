@@ -1,5 +1,6 @@
 pub mod cpu;
 pub mod memory;
+pub mod ui;
 
 use thiserror::Error;
 
@@ -13,4 +14,7 @@ pub enum EmulationError {
     RomTooLarge,
     #[error("Tried to write to read-only memory")]
     InvalidWrite,
+
+    #[error("Invalid address")]
+    InvalidAddress(u16),
 }

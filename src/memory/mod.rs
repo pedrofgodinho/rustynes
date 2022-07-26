@@ -26,9 +26,9 @@ impl Memory {
         Ok(())
     }
 
-    pub fn read(&self, address: u16) -> u8 {
-        let (region, idx) = self.virtual_address_to_slice_and_index(address);
-        region[idx]
+    pub fn read(&self, address: u16) -> Result<u8, EmulationError> {
+        let (region, idx) = self.virtual_address_to_slice_and_index(address)?;
+        Ok(region[idx])
     }
 
     pub fn write(&mut self, address: u16, value: u8) -> Result<(), EmulationError> {
@@ -37,8 +37,8 @@ impl Memory {
         Ok(())
     }
 
-    pub fn read_word(&self, address: u16) -> u16 {
-        u16::from_le_bytes([self.read(address), self.read(address + 1)])
+    pub fn read_word(&self, address: u16) -> Result<u16, EmulationError> {
+        Ok(u16::from_le_bytes([self.read(address)?, self.read(address + 1)?]))
     }
 
     pub fn write_word(&mut self, address: u16, value: u16) -> Result<(), EmulationError> {
@@ -52,15 +52,15 @@ impl Memory {
             0x0000..=0x1fff => Ok((&mut self.program_ram, address as usize)),
             0x8000..=0xffff => Ok((&mut self.program_rom, address as usize - 0x8000)),
             //0x8000..=0xffff => Err(EmulationError::InvalidWrite),
-            _ => todo!(),
+            _ => Err(EmulationError::InvalidAddress(address)),
         }
     }
 
-    fn virtual_address_to_slice_and_index(&self, address: u16) -> (&[u8], usize) {
+    fn virtual_address_to_slice_and_index(&self, address: u16) -> Result<(&[u8], usize) , EmulationError> {
         match address {
-            0x0000..=0x1fff => (&self.program_ram, address as usize),
-            0x8000..=0xffff => (&self.program_rom, address as usize - 0x8000),
-            _ => todo!(),
+            0x0000..=0x1fff => Ok((&self.program_ram, address as usize)),
+            0x8000..=0xffff => Ok((&self.program_rom, address as usize - 0x8000)),
+            _ => Err(EmulationError::InvalidAddress(address)),
         }
     }
 }

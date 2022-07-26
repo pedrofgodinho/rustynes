@@ -26,8 +26,8 @@ enum AddressingMode {
 }
 
 #[derive(Copy, Clone)]
-struct CpuStatus {
-    status: u8,
+pub struct CpuStatus {
+    pub status: u8,
 }
 
 impl CpuStatus {
@@ -154,14 +154,15 @@ impl CpuStatus {
     }
 }
 pub struct Cpu {
-    register_a: u8,
-    register_x: u8,
-    register_y: u8,
-    register_sp: u8,
-    register_pc: u16,
-    status_flags: CpuStatus,
-    memory: Memory,
-    running: bool,
+    pub register_a: u8,
+    pub register_x: u8,
+    pub register_y: u8,
+    pub register_sp: u8,
+    pub register_pc: u16,
+    pub status_flags: CpuStatus,
+    pub memory: Memory,
+    pub halted: bool,
+    pub running: bool,
 }
 
 impl Cpu {
@@ -174,6 +175,7 @@ impl Cpu {
             register_pc: 0x0000,
             status_flags: CpuStatus::new(),
             memory: Memory::new(),
+            halted: false,
             running: false,
         }
     }
@@ -189,14 +191,26 @@ impl Cpu {
         self.register_x = 0x00;
         self.register_y = 0x00;
         self.register_sp = STACK_RESET;
-        self.register_pc = self.memory.read_word(0xFFFC);
+        self.register_pc = self.memory.read_word(0xFFFC).unwrap();
         self.status_flags.reset();
+        self.halted = false;
     }
 
     pub fn run(&mut self) -> Result<(), EmulationError> {
         self.running = true;
-        while self.running {
-            let opcode = self.memory.read(self.register_pc);
+        while !self.halted && self.running {
+            let opcode = self.memory.read(self.register_pc)?;
+            self.register_pc = self.register_pc.wrapping_add(1);
+
+            self.handle_opcode(opcode)?;
+        }
+        self.running = false;
+        Ok(())
+    }
+
+    pub fn step(&mut self) -> Result<(), EmulationError> {
+        if !self.halted {
+            let opcode = self.memory.read(self.register_pc)?;
             self.register_pc = self.register_pc.wrapping_add(1);
 
             self.handle_opcode(opcode)?;
@@ -205,6 +219,6 @@ impl Cpu {
     }
 
     fn halt(&mut self) {
-        self.running = false;
+        self.halted = true;
     }
 }
