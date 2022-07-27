@@ -6,6 +6,7 @@ pub struct RustyNesUi {
     cpu: Cpu,
     memory_start_address: String,
     memory_end_address: String,
+    first_frame: bool,
 }
 
 impl RustyNesUi {
@@ -19,6 +20,7 @@ impl RustyNesUi {
             cpu,
             memory_start_address: "0000".to_string(),
             memory_end_address: "0100".to_string(),
+            first_frame: true,
         }
     }
 }
@@ -27,9 +29,9 @@ impl eframe::App for RustyNesUi {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
         egui::SidePanel::left("side_panel").show(ctx, |ui| {
             ui.heading("Options");
-            ui.horizontal(|ui| {
-                ui.label("abc");
-            });
+            if ui.button("Organize Windows").clicked() {
+                ui.ctx().memory().reset_areas();
+            }
         });
 
         egui::Window::new("Registers").resizable(false).show(ctx, |ui| {
@@ -50,6 +52,9 @@ impl eframe::App for RustyNesUi {
         egui::Window::new("Controls").resizable(false).show(ctx, |ui| {
             if ui.button("Step").clicked() {
                 self.cpu.step();
+            }
+            if ui.button("Reset").clicked() {
+                self.cpu.reset();
             }
         });
 
@@ -80,20 +85,35 @@ impl eframe::App for RustyNesUi {
         });
 
         egui::Window::new("Disassembly")
+            .resizable(false)
+            .vscroll(false)
+            .show(ctx, |ui| {
+                egui::Grid::new("disassembly_grid")
+                    .striped(true)
+                    .min_col_width(10.0)
+                    .show(ui, |ui| {
+                        self.draw_disassembly_table(ui);
+                    });
+
+            });
+
+        egui::Window::new("Stack")
             .resizable(true)
             .vscroll(true)
             .show(ctx, |ui| {
-                let def = "???".to_string();
-                let (disassembly, increment) = match self.cpu.memory.read(self.cpu.register_pc) {
-                    Ok(opcode) => {
-                        let disass = self.cpu.disassemble(opcode).unwrap_or((def, 1));
-                        disass
-                    }
-                    _ => (def, 1),
-                };
-                ui.label(&disassembly);
-                ui.label(&format!("Increment: {}", increment));
+                egui::Grid::new("stack_grid")
+                    .striped(true)
+                    .min_col_width(10.0)
+                    .show(ui, |ui| {
+                        self.draw_stack_table(ui);
+                    });
             });
+
+
+        if self.first_frame {
+            self.first_frame = false;
+            ctx.memory().reset_areas();
+        }
     }
 }
 
@@ -178,6 +198,44 @@ impl RustyNesUi {
         }
         if draw_end != end {
             ui.label("...");
+            ui.end_row();
+        }
+    }
+
+    fn draw_disassembly_table(&mut self, ui: &mut Ui) {
+        let mut pc = self.cpu.register_pc;
+        for i in 0..20 {
+            let def = "???".to_string();
+            let (disassembly, increment) = match self.cpu.memory.read(pc) {
+                Ok(opcode) => {
+                    let disass = self.cpu.disassemble(pc).unwrap_or((def, 1));
+                    disass
+                }
+                _ => (def, 1),
+            };
+            ui.label(format!("{:04X}", pc));
+            ui.label(&disassembly);
+            pc += increment;
+            ui.end_row();
+        }
+    }
+
+    fn draw_stack_table(&mut self, ui: &mut Ui) {
+        for i in (0x100_u16..0x200_u16).step_by(1).rev() {
+            if (i & 0xFF) as u8 == self.cpu.register_sp {
+                ui.label("SP => ");
+            } else {
+                ui.label("");
+            }
+            ui.label(format!("{:04X}", i));
+            match self.cpu.memory.read(i) {
+                Ok(value) => ui.label(format!("{:02X}", value)),
+                Err(_) => ui.label("--"),
+            };
+            match self.cpu.memory.read_word(i) {
+                Ok(value) => ui.label(format!("{:04X}", value)),
+                Err(_) => ui.label("--"),
+            };
             ui.end_row();
         }
     }

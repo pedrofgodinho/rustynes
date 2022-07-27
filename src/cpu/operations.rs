@@ -36,16 +36,17 @@ impl Cpu {
         include!("operations_include.rs");
     }
 
-    pub fn disassemble(&mut self, opcode: u8) -> Result<(String, u16), EmulationError> {
+    pub fn disassemble(&mut self, pc: u16) -> Result<(String, u16), EmulationError> {
+        let opcode = self.memory.read(pc)?;
         macro_rules! match_op {
             ($to_match:expr; $($instruction:ident: $($opcode:expr => $mode:ident ($bytes:expr)),+;)+) => {
                 return match $to_match {
                     $($($opcode => {
                         let instruction_name = stringify!($instruction);
                         match $bytes {
-                            1 => Ok((format!("{}", instruction_name), $bytes - 1)),
-                            2 => Ok((format!("{} {:?} ${:02x}", instruction_name, AddressingMode::$mode, self.memory.read(self.register_pc+1).unwrap()), $bytes - 1)),
-                            3 => Ok((format!("{} {:?} ${:04x}", instruction_name, AddressingMode::$mode, self.memory.read_word(self.register_pc+1).unwrap()), $bytes - 1)),
+                            1 => Ok((format!("{}", instruction_name), $bytes)),
+                            2 => Ok((format!("{} {:?} ${:02x}", instruction_name, AddressingMode::$mode, self.memory.read(pc+1).unwrap()), $bytes)),
+                            3 => Ok((format!("{} {:?} ${:04x}", instruction_name, AddressingMode::$mode, self.memory.read_word(pc+1).unwrap()), $bytes)),
                             _ => Err(EmulationError::InvalidOpcode(opcode)),
                         }
                     },)+)+
@@ -105,7 +106,7 @@ impl Cpu {
 
     fn stack_pop(&mut self) -> Result<u8, EmulationError> {
         self.register_sp = self.register_sp.wrapping_add(1);
-        Ok(self.memory.read(STACK_BASE + self.register_sp as u16)?)
+        self.memory.read(STACK_BASE + self.register_sp as u16)
     }
 
     fn stack_push_word(&mut self, value: u16) -> Result<(), EmulationError> {
