@@ -2,8 +2,8 @@
 mod test;
 mod operations;
 
-use crate::memory::Memory;
 use crate::EmulationError;
+use crate::memory::Bus;
 
 const STACK_BASE: u16 = 0x0100;
 const STACK_RESET: u8 = 0xff;
@@ -160,13 +160,13 @@ pub struct Cpu {
     pub register_sp: u8,
     pub register_pc: u16,
     pub status_flags: CpuStatus,
-    pub memory: Memory,
+    pub bus: Box<dyn Bus>,
     pub halted: bool,
     pub running: bool,
 }
 
 impl Cpu {
-    pub fn new() -> Cpu {
+    pub fn new(bus: Box<dyn Bus>) -> Cpu {
         Cpu {
             register_a: 0x00,
             register_x: 0x00,
@@ -174,16 +174,10 @@ impl Cpu {
             register_sp: STACK_RESET,
             register_pc: 0x0000,
             status_flags: CpuStatus::new(),
-            memory: Memory::new(),
+            bus,
             halted: false,
             running: false,
         }
-    }
-
-    pub fn load_rom(&mut self, rom: &[u8]) -> Result<(), EmulationError> {
-        self.memory.load_rom(rom)?;
-        self.memory.write_word(0xFFFC, 0x8000).unwrap();
-        Ok(())
     }
 
     pub fn reset(&mut self) {
@@ -191,7 +185,7 @@ impl Cpu {
         self.register_x = 0x00;
         self.register_y = 0x00;
         self.register_sp = STACK_RESET;
-        self.register_pc = self.memory.read_word(0xFFFC).unwrap();
+        self.register_pc = self.bus.read_word(0xFFFC).unwrap();
         self.status_flags.reset();
         self.halted = false;
     }
@@ -199,7 +193,7 @@ impl Cpu {
     pub fn run(&mut self) -> Result<(), EmulationError> {
         self.running = true;
         while !self.halted && self.running {
-            let opcode = self.memory.read(self.register_pc)?;
+            let opcode = self.bus.read(self.register_pc)?;
             self.register_pc = self.register_pc.wrapping_add(1);
 
             self.handle_opcode(opcode)?;
@@ -210,7 +204,7 @@ impl Cpu {
 
     pub fn step(&mut self) -> Result<(), EmulationError> {
         if !self.halted {
-            let opcode = self.memory.read(self.register_pc)?;
+            let opcode = self.bus.read(self.register_pc)?;
             self.register_pc = self.register_pc.wrapping_add(1);
 
             self.handle_opcode(opcode)?;

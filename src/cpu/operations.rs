@@ -37,7 +37,7 @@ impl Cpu {
     }
 
     pub fn disassemble(&mut self, pc: u16) -> Result<(String, u16), EmulationError> {
-        let opcode = self.memory.read(pc)?;
+        let opcode = self.bus.read(pc)?;
         macro_rules! match_op {
             ($to_match:expr; $($instruction:ident: $($opcode:expr => $mode:ident ($bytes:expr)),+;)+) => {
                 return match $to_match {
@@ -45,8 +45,8 @@ impl Cpu {
                         let instruction_name = stringify!($instruction);
                         match $bytes {
                             1 => Ok((format!("{}", instruction_name), $bytes)),
-                            2 => Ok((format!("{} {:?} ${:02x}", instruction_name, AddressingMode::$mode, self.memory.read(pc+1).unwrap()), $bytes)),
-                            3 => Ok((format!("{} {:?} ${:04x}", instruction_name, AddressingMode::$mode, self.memory.read_word(pc+1).unwrap()), $bytes)),
+                            2 => Ok((format!("{} {:?} ${:02x}", instruction_name, AddressingMode::$mode, self.bus.read(pc+1).unwrap()), $bytes)),
+                            3 => Ok((format!("{} {:?} ${:04x}", instruction_name, AddressingMode::$mode, self.bus.read_word(pc+1).unwrap()), $bytes)),
                             _ => Err(EmulationError::InvalidOpcode(opcode)),
                         }
                     },)+)+
@@ -62,34 +62,34 @@ impl Cpu {
         // TODO Test properly
         match mode {
             AddressingMode::Immediate => Ok(self.register_pc),
-            AddressingMode::ZeroPage => Ok(self.memory.read(self.register_pc)? as u16),
-            AddressingMode::ZeroPageX => Ok(self.memory.read(self.register_pc)?.wrapping_add(self.register_x) as u16),
-            AddressingMode::ZeroPageY => Ok(self.memory.read(self.register_pc)?.wrapping_add(self.register_y) as u16),
-            AddressingMode::Absolute => Ok(self.memory.read_word(self.register_pc)?),
-            AddressingMode::AbsoluteX => Ok(self.memory.read_word(self.register_pc)?.wrapping_add(self.register_x as u16)),
-            AddressingMode::AbsoluteY => Ok(self.memory.read_word(self.register_pc)?.wrapping_add(self.register_y as u16)),
+            AddressingMode::ZeroPage => Ok(self.bus.read(self.register_pc)? as u16),
+            AddressingMode::ZeroPageX => Ok(self.bus.read(self.register_pc)?.wrapping_add(self.register_x) as u16),
+            AddressingMode::ZeroPageY => Ok(self.bus.read(self.register_pc)?.wrapping_add(self.register_y) as u16),
+            AddressingMode::Absolute => Ok(self.bus.read_word(self.register_pc)?),
+            AddressingMode::AbsoluteX => Ok(self.bus.read_word(self.register_pc)?.wrapping_add(self.register_x as u16)),
+            AddressingMode::AbsoluteY => Ok(self.bus.read_word(self.register_pc)?.wrapping_add(self.register_y as u16)),
             AddressingMode::Indirect => {
                 // Emulate the 6502 bug of wrapping around the address space when the low byte of the address is 0xFF.
-                let address = self.memory.read_word(self.register_pc)?;
+                let address = self.bus.read_word(self.register_pc)?;
                 if address & 0x00FF == 0x00FF {
-                    Ok(u16::from_le_bytes([self.memory.read(address)?, self.memory.read(address & 0xFF00)?]))
+                    Ok(u16::from_le_bytes([self.bus.read(address)?, self.bus.read(address & 0xFF00)?]))
                 } else {
-                    Ok(self.memory.read_word(address)?)
+                    Ok(self.bus.read_word(address)?)
                 }
 
             },
             AddressingMode::Relative => Ok(self.register_pc),
             AddressingMode::IndirectX => {
-                let base = self.memory.read(self.register_pc)?;
+                let base = self.bus.read(self.register_pc)?;
                 let ptr = base.wrapping_add(self.register_x);
-                let lo = self.memory.read(ptr as u16)?;
-                let hi = self.memory.read(ptr.wrapping_add(1) as u16)?;
+                let lo = self.bus.read(ptr as u16)?;
+                let hi = self.bus.read(ptr.wrapping_add(1) as u16)?;
                 Ok(u16::from_le_bytes([lo, hi]))
             },
             AddressingMode::IndirectY => {
-                let base = self.memory.read(self.register_pc)?;
-                let lo = self.memory.read(base as u16)?;
-                let hi = self.memory.read(base.wrapping_add(1) as u16)?;
+                let base = self.bus.read(self.register_pc)?;
+                let lo = self.bus.read(base as u16)?;
+                let hi = self.bus.read(base.wrapping_add(1) as u16)?;
                 let deref_base = u16::from_le_bytes([lo, hi]);
                 Ok(deref_base.wrapping_add(self.register_y as u16))
             },
@@ -99,14 +99,14 @@ impl Cpu {
 
 
     fn stack_push(&mut self, value: u8) -> Result<(), EmulationError> {
-        self.memory.write(STACK_BASE + self.register_sp as u16, value)?;
+        self.bus.write(STACK_BASE + self.register_sp as u16, value)?;
         self.register_sp = self.register_sp.wrapping_sub(1);
         Ok(())
     }
 
     fn stack_pop(&mut self) -> Result<u8, EmulationError> {
         self.register_sp = self.register_sp.wrapping_add(1);
-        self.memory.read(STACK_BASE + self.register_sp as u16)
+        self.bus.read(STACK_BASE + self.register_sp as u16)
     }
 
     fn stack_push_word(&mut self, value: u16) -> Result<(), EmulationError> {
@@ -137,7 +137,7 @@ impl Cpu {
 
     fn branch_aux(&mut self, mode: AddressingMode, condition: bool) -> Result<OpResult, EmulationError> {
         let addr = self.get_operand_address(mode)?;
-        let jump = self.memory.read(addr)? as i8;
+        let jump = self.bus.read(addr)? as i8;
         if condition {
             self.register_pc = addr.wrapping_add(1).wrapping_add(jump as u16);
             Ok(OpResult::new(0, false))
@@ -148,7 +148,7 @@ impl Cpu {
 
     fn compare_aux(&mut self, mode: AddressingMode, compare_with: u8) -> Result<OpResult, EmulationError> {
         let addr = self.get_operand_address(mode)?;
-        let value = self.memory.read(addr)?;
+        let value = self.bus.read(addr)?;
         self.status_flags.set_carry(value < compare_with);
         let result = compare_with.wrapping_sub(value);
         self.status_flags.update_zero(result);
@@ -161,14 +161,14 @@ impl Cpu {
     // Ignoring the decimal mode since it is not used in the NES.
     fn adc(&mut self, mode: AddressingMode) -> Result<OpResult, EmulationError> {
         let addr = self.get_operand_address(mode)?;
-        let value = self.memory.read(addr)?;
+        let value = self.bus.read(addr)?;
         self.add_to_register_a(value);
         Ok(OpResult::new(0, true))
     }
 
     fn and(&mut self, mode: AddressingMode) -> Result<OpResult, EmulationError> {
         let addr = self.get_operand_address(mode)?;
-        self.register_a &= self.memory.read(addr)?;
+        self.register_a &= self.bus.read(addr)?;
         self.status_flags.update_negative(self.register_a);
         self.status_flags.update_zero(self.register_a);
         Ok(OpResult::new(0, true))
@@ -185,8 +185,8 @@ impl Cpu {
             },
             _ => {
                 let addr = self.get_operand_address(mode)?;
-                old = self.memory.read(addr)?;
-                self.memory.write(addr, old << 1)?;
+                old = self.bus.read(addr)?;
+                self.bus.write(addr, old << 1)?;
                 new = old << 1;
             }
         }
@@ -210,7 +210,7 @@ impl Cpu {
 
     fn bit(&mut self, mode: AddressingMode) -> Result<OpResult, EmulationError> {
         let addr = self.get_operand_address(mode)?;
-        let value = self.memory.read(addr)?;
+        let value = self.bus.read(addr)?;
         self.status_flags.set_overflow(value & 0x40 != 0);
         self.status_flags.update_negative(value);
         self.status_flags.update_zero(self.register_a & value);
@@ -278,9 +278,9 @@ impl Cpu {
 
     fn dec(&mut self, mode: AddressingMode) -> Result<OpResult, EmulationError> {
         let addr = self.get_operand_address(mode)?;
-        let mut value = self.memory.read(addr)?;
+        let mut value = self.bus.read(addr)?;
         value = value.wrapping_sub(1);
-        self.memory.write(addr, value)?;
+        self.bus.write(addr, value)?;
         self.status_flags.update_negative(value);
         self.status_flags.update_zero(value);
         Ok(OpResult::new(0, true))
@@ -302,7 +302,7 @@ impl Cpu {
 
     fn eor(&mut self, mode: AddressingMode) -> Result<OpResult, EmulationError> {
         let addr = self.get_operand_address(mode)?;
-        let value = self.memory.read(addr)?;
+        let value = self.bus.read(addr)?;
         self.register_a ^= value;
         self.status_flags.update_negative(self.register_a);
         self.status_flags.update_zero(self.register_a);
@@ -311,9 +311,9 @@ impl Cpu {
 
     fn inc(&mut self, mode: AddressingMode) -> Result<OpResult, EmulationError> {
         let addr = self.get_operand_address(mode)?;
-        let mut value = self.memory.read(addr)?;
+        let mut value = self.bus.read(addr)?;
         value = value.wrapping_add(1);
-        self.memory.write(addr, value)?;
+        self.bus.write(addr, value)?;
         self.status_flags.update_negative(value);
         self.status_flags.update_zero(value);
         Ok(OpResult::new(0, true))
@@ -348,7 +348,7 @@ impl Cpu {
 
     fn lda(&mut self, mode: AddressingMode) -> Result<OpResult, EmulationError> {
         let addr = self.get_operand_address(mode)?;
-        self.register_a = self.memory.read(addr)?;
+        self.register_a = self.bus.read(addr)?;
         self.status_flags.update_negative(self.register_a);
         self.status_flags.update_zero(self.register_a);
         Ok(OpResult::new(0, true))
@@ -356,7 +356,7 @@ impl Cpu {
 
     fn ldx(&mut self, mode: AddressingMode) -> Result<OpResult, EmulationError> {
         let addr = self.get_operand_address(mode)?;
-        self.register_x = self.memory.read(addr)?;
+        self.register_x = self.bus.read(addr)?;
         self.status_flags.update_negative(self.register_x);
         self.status_flags.update_zero(self.register_x);
         Ok(OpResult::new(0, true))
@@ -364,7 +364,7 @@ impl Cpu {
 
     fn ldy(&mut self, mode: AddressingMode) -> Result<OpResult, EmulationError> {
         let addr = self.get_operand_address(mode)?;
-        self.register_y = self.memory.read(addr)?;
+        self.register_y = self.bus.read(addr)?;
         self.status_flags.update_negative(self.register_y);
         self.status_flags.update_zero(self.register_y);
         Ok(OpResult::new(0, true))
@@ -381,8 +381,8 @@ impl Cpu {
             },
             _ => {
                 let addr = self.get_operand_address(mode)?;
-                old = self.memory.read(addr)?;
-                self.memory.write(addr, old >> 1)?;
+                old = self.bus.read(addr)?;
+                self.bus.write(addr, old >> 1)?;
                 new = old >> 1;
             }
         }
@@ -398,7 +398,7 @@ impl Cpu {
 
     fn ora(&mut self, mode: AddressingMode) -> Result<OpResult, EmulationError> {
         let addr = self.get_operand_address(mode)?;
-        let value = self.memory.read(addr)?;
+        let value = self.bus.read(addr)?;
         self.register_a |= value;
         self.status_flags.update_negative(self.register_a);
         self.status_flags.update_zero(self.register_a);
@@ -443,8 +443,8 @@ impl Cpu {
             },
             _ => {
                 let addr = self.get_operand_address(mode)?;
-                old = self.memory.read(addr)?;
-                self.memory.write(addr, old.rotate_left(1))?;
+                old = self.bus.read(addr)?;
+                self.bus.write(addr, old.rotate_left(1))?;
                 new = old.rotate_left(1);
             }
         }
@@ -465,8 +465,8 @@ impl Cpu {
             },
             _ => {
                 let addr = self.get_operand_address(mode)?;
-                old = self.memory.read(addr)?;
-                self.memory.write(addr, old.rotate_right(1))?;
+                old = self.bus.read(addr)?;
+                self.bus.write(addr, old.rotate_right(1))?;
                 new = old.rotate_right(1);
             }
         }
@@ -491,7 +491,7 @@ impl Cpu {
 
     fn sbc(&mut self, mode: AddressingMode) -> Result<OpResult, EmulationError> {
         let addr = self.get_operand_address(mode)?;
-        let value = self.memory.read(addr)?;
+        let value = self.bus.read(addr)?;
         self.add_to_register_a((value as i8).wrapping_neg().wrapping_sub(1) as u8);
         Ok(OpResult::new(0, true))
     }
@@ -513,19 +513,19 @@ impl Cpu {
 
     fn sta(&mut self, mode: AddressingMode) -> Result<OpResult, EmulationError> {
         let addr = self.get_operand_address(mode)?;
-        self.memory.write(addr, self.register_a)?;
+        self.bus.write(addr, self.register_a)?;
         Ok(OpResult::new(0, true))
     }
 
     fn stx(&mut self, mode: AddressingMode) -> Result<OpResult, EmulationError> {
         let addr = self.get_operand_address(mode)?;
-        self.memory.write(addr, self.register_x)?;
+        self.bus.write(addr, self.register_x)?;
         Ok(OpResult::new(0, true))
     }
 
     fn sty(&mut self, mode: AddressingMode) -> Result<OpResult, EmulationError> {
         let addr = self.get_operand_address(mode)?;
-        self.memory.write(addr, self.register_y)?;
+        self.bus.write(addr, self.register_y)?;
         Ok(OpResult::new(0, true))
     }
 
