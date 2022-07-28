@@ -1,7 +1,6 @@
 use crate::cpu::{AddressingMode, Cpu, STACK_BASE};
 use crate::EmulationError;
 
-
 struct OpResult {
     extra_cycles: u8,
     increment_pc: bool,
@@ -15,7 +14,6 @@ impl OpResult {
         }
     }
 }
-
 
 impl Cpu {
     pub(super) fn handle_opcode(&mut self, opcode: u8) -> Result<u8, EmulationError> {
@@ -36,7 +34,7 @@ impl Cpu {
         include!("operations_include.rs");
     }
 
-    pub fn disassemble(&mut self, pc: u16) -> Result<(String, u16), EmulationError> {
+    pub fn disassemble(&self, pc: u16) -> Result<(String, u16), EmulationError> {
         let opcode = self.bus.read(pc)?;
         macro_rules! match_op {
             ($to_match:expr; $($instruction:ident: $($opcode:expr => $mode:ident ($bytes:expr)),+;)+) => {
@@ -57,27 +55,40 @@ impl Cpu {
         include!("operations_include.rs");
     }
 
-
     fn get_operand_address(&self, mode: AddressingMode) -> Result<u16, EmulationError> {
         // TODO Test properly
         match mode {
             AddressingMode::Immediate => Ok(self.register_pc),
             AddressingMode::ZeroPage => Ok(self.bus.read(self.register_pc)? as u16),
-            AddressingMode::ZeroPageX => Ok(self.bus.read(self.register_pc)?.wrapping_add(self.register_x) as u16),
-            AddressingMode::ZeroPageY => Ok(self.bus.read(self.register_pc)?.wrapping_add(self.register_y) as u16),
+            AddressingMode::ZeroPageX => Ok(self
+                .bus
+                .read(self.register_pc)?
+                .wrapping_add(self.register_x) as u16),
+            AddressingMode::ZeroPageY => Ok(self
+                .bus
+                .read(self.register_pc)?
+                .wrapping_add(self.register_y) as u16),
             AddressingMode::Absolute => Ok(self.bus.read_word(self.register_pc)?),
-            AddressingMode::AbsoluteX => Ok(self.bus.read_word(self.register_pc)?.wrapping_add(self.register_x as u16)),
-            AddressingMode::AbsoluteY => Ok(self.bus.read_word(self.register_pc)?.wrapping_add(self.register_y as u16)),
+            AddressingMode::AbsoluteX => Ok(self
+                .bus
+                .read_word(self.register_pc)?
+                .wrapping_add(self.register_x as u16)),
+            AddressingMode::AbsoluteY => Ok(self
+                .bus
+                .read_word(self.register_pc)?
+                .wrapping_add(self.register_y as u16)),
             AddressingMode::Indirect => {
                 // Emulate the 6502 bug of wrapping around the address space when the low byte of the address is 0xFF.
                 let address = self.bus.read_word(self.register_pc)?;
                 if address & 0x00FF == 0x00FF {
-                    Ok(u16::from_le_bytes([self.bus.read(address)?, self.bus.read(address & 0xFF00)?]))
+                    Ok(u16::from_le_bytes([
+                        self.bus.read(address)?,
+                        self.bus.read(address & 0xFF00)?,
+                    ]))
                 } else {
                     Ok(self.bus.read_word(address)?)
                 }
-
-            },
+            }
             AddressingMode::Relative => Ok(self.register_pc),
             AddressingMode::IndirectX => {
                 let base = self.bus.read(self.register_pc)?;
@@ -85,21 +96,21 @@ impl Cpu {
                 let lo = self.bus.read(ptr as u16)?;
                 let hi = self.bus.read(ptr.wrapping_add(1) as u16)?;
                 Ok(u16::from_le_bytes([lo, hi]))
-            },
+            }
             AddressingMode::IndirectY => {
                 let base = self.bus.read(self.register_pc)?;
                 let lo = self.bus.read(base as u16)?;
                 let hi = self.bus.read(base.wrapping_add(1) as u16)?;
                 let deref_base = u16::from_le_bytes([lo, hi]);
                 Ok(deref_base.wrapping_add(self.register_y as u16))
-            },
+            }
             _ => panic!("Unsupported addressing mode: {:?}", mode),
         }
     }
 
-
     fn stack_push(&mut self, value: u8) -> Result<(), EmulationError> {
-        self.bus.write(STACK_BASE + self.register_sp as u16, value)?;
+        self.bus
+            .write(STACK_BASE + self.register_sp as u16, value)?;
         self.register_sp = self.register_sp.wrapping_sub(1);
         Ok(())
     }
@@ -124,18 +135,23 @@ impl Cpu {
     fn add_to_register_a(&mut self, data: u8) {
         let sum = self.register_a as u16 + data as u16 + self.status_flags.get_carry() as u16;
 
-        let carry= sum > 0xFF;
+        let carry = sum > 0xFF;
 
         self.status_flags.set_carry(carry);
         let result = sum as u8;
-        self.status_flags.set_overflow((data ^ result) & (result ^ self.register_a) & 0x80 != 0);
+        self.status_flags
+            .set_overflow((data ^ result) & (result ^ self.register_a) & 0x80 != 0);
 
         self.register_a = result;
         self.status_flags.update_negative(self.register_a);
         self.status_flags.update_zero(self.register_a);
     }
 
-    fn branch_aux(&mut self, mode: AddressingMode, condition: bool) -> Result<OpResult, EmulationError> {
+    fn branch_aux(
+        &mut self,
+        mode: AddressingMode,
+        condition: bool,
+    ) -> Result<OpResult, EmulationError> {
         let addr = self.get_operand_address(mode)?;
         let jump = self.bus.read(addr)? as i8;
         if condition {
@@ -146,7 +162,11 @@ impl Cpu {
         }
     }
 
-    fn compare_aux(&mut self, mode: AddressingMode, compare_with: u8) -> Result<OpResult, EmulationError> {
+    fn compare_aux(
+        &mut self,
+        mode: AddressingMode,
+        compare_with: u8,
+    ) -> Result<OpResult, EmulationError> {
         let addr = self.get_operand_address(mode)?;
         let value = self.bus.read(addr)?;
         self.status_flags.set_carry(value < compare_with);
@@ -155,8 +175,6 @@ impl Cpu {
         self.status_flags.update_negative(result);
         Ok(OpResult::new(0, true))
     }
-
-
 
     // Ignoring the decimal mode since it is not used in the NES.
     fn adc(&mut self, mode: AddressingMode) -> Result<OpResult, EmulationError> {
@@ -182,7 +200,7 @@ impl Cpu {
                 old = self.register_a;
                 self.register_a <<= 1;
                 new = self.register_a;
-            },
+            }
             _ => {
                 let addr = self.get_operand_address(mode)?;
                 old = self.bus.read(addr)?;
@@ -261,8 +279,6 @@ impl Cpu {
         self.status_flags.set_overflow(false);
         Ok(OpResult::new(0, true))
     }
-
-
 
     fn cmp(&mut self, mode: AddressingMode) -> Result<OpResult, EmulationError> {
         self.compare_aux(mode, self.register_a)
@@ -378,7 +394,7 @@ impl Cpu {
                 old = self.register_a;
                 self.register_a >>= 1;
                 new = self.register_a;
-            },
+            }
             _ => {
                 let addr = self.get_operand_address(mode)?;
                 old = self.bus.read(addr)?;
@@ -440,7 +456,7 @@ impl Cpu {
                 old = self.register_a;
                 self.register_a = self.register_a.rotate_left(1);
                 new = self.register_a;
-            },
+            }
             _ => {
                 let addr = self.get_operand_address(mode)?;
                 old = self.bus.read(addr)?;
@@ -462,7 +478,7 @@ impl Cpu {
                 old = self.register_a;
                 self.register_a = self.register_a.rotate_right(1);
                 new = self.register_a;
-            },
+            }
             _ => {
                 let addr = self.get_operand_address(mode)?;
                 old = self.bus.read(addr)?;

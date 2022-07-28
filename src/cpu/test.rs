@@ -117,7 +117,8 @@ fn test_asl() {
 #[test]
 fn test_asl_absolute() {
     let mut bus = NesBus::new();
-    bus.load_rom(&[0x0E, 0x04, 0x80, 0x00, 0b1110_1010]).unwrap();
+    bus.load_rom(&[0x0E, 0x04, 0x80, 0x00, 0b1110_1010])
+        .unwrap();
     let mut cpu = Cpu::new(Box::new(bus));
     cpu.reset();
     cpu.run().unwrap();
@@ -220,7 +221,8 @@ fn test_eor() {
 #[test]
 fn test_absolute_jmp() {
     let mut bus = NesBus::new();
-    bus.load_rom(&[0x4C, 0x04, 0x80, 0x00, 0xA9, 0x01, 0x00]).unwrap();
+    bus.load_rom(&[0x4C, 0x04, 0x80, 0x00, 0xA9, 0x01, 0x00])
+        .unwrap();
     let mut cpu = Cpu::new(Box::new(bus));
     cpu.reset();
     cpu.run().unwrap();
@@ -230,7 +232,8 @@ fn test_absolute_jmp() {
 #[test]
 fn test_indirect_jmp() {
     let mut bus = NesBus::new();
-    bus.load_rom(&[0x6C, 0x03, 0x80, 0x06, 0x80, 0x00, 0xA9, 0x01, 0x00]).unwrap();
+    bus.load_rom(&[0x6C, 0x03, 0x80, 0x06, 0x80, 0x00, 0xA9, 0x01, 0x00])
+        .unwrap();
     let mut cpu = Cpu::new(Box::new(bus));
     cpu.reset();
     cpu.run().unwrap();
@@ -240,7 +243,8 @@ fn test_indirect_jmp() {
 #[test]
 fn test_indirect_jmp_bug() {
     let mut bus = NesBus::new();
-    bus.load_rom(&[0x6C, 0xFF, 0x00, 0x00, 0xA9, 0x01, 0x00]).unwrap();
+    bus.load_rom(&[0x6C, 0xFF, 0x00, 0x00, 0xA9, 0x01, 0x00])
+        .unwrap();
     let mut cpu = Cpu::new(Box::new(bus));
     cpu.reset();
     cpu.bus.write(0x00FF, 0x04).unwrap();
@@ -252,7 +256,8 @@ fn test_indirect_jmp_bug() {
 #[test]
 fn test_jsr() {
     let mut bus = NesBus::new();
-    bus.load_rom(&[0x20, 0x04, 0x80, 0x00, 0xA9, 0x01, 0x00]).unwrap();
+    bus.load_rom(&[0x20, 0x04, 0x80, 0x00, 0xA9, 0x01, 0x00])
+        .unwrap();
     let mut cpu = Cpu::new(Box::new(bus));
     cpu.reset();
     cpu.run().unwrap();
@@ -290,7 +295,8 @@ fn test_lsr() {
 #[test]
 fn test_lsr_absolute() {
     let mut bus = NesBus::new();
-    bus.load_rom(&[0x4E, 0x04, 0x80, 0x00, 0b1110_1011]).unwrap();
+    bus.load_rom(&[0x4E, 0x04, 0x80, 0x00, 0b1110_1011])
+        .unwrap();
     let mut cpu = Cpu::new(Box::new(bus));
     cpu.reset();
     cpu.run().unwrap();
@@ -378,7 +384,8 @@ fn test_rol() {
 #[test]
 fn test_rol_absolute() {
     let mut bus = NesBus::new();
-    bus.load_rom(&[0x2E, 0x04, 0x80, 0x00, 0b1110_1011]).unwrap();
+    bus.load_rom(&[0x2E, 0x04, 0x80, 0x00, 0b1110_1011])
+        .unwrap();
     let mut cpu = Cpu::new(Box::new(bus));
     cpu.reset();
     cpu.run().unwrap();
@@ -405,11 +412,15 @@ fn test_ror() {
 #[test]
 fn test_ror_absolute() {
     let mut bus = NesBus::new();
-    bus.load_rom(&[0x6E, 0x04, 0x80, 0x00, 0b1110_1011]).unwrap();
+    bus.load_rom(&[0x6E, 0x04, 0x80, 0x00, 0b1110_1011])
+        .unwrap();
     let mut cpu = Cpu::new(Box::new(bus));
     cpu.reset();
     cpu.run().unwrap();
-    assert_eq!(cpu.bus.read(0x8004).unwrap(), 0b1110_1011_u8.rotate_right(1));
+    assert_eq!(
+        cpu.bus.read(0x8004).unwrap(),
+        0b1110_1011_u8.rotate_right(1)
+    );
     assert!(!cpu.status_flags.get_zero());
     assert!(cpu.status_flags.get_negative());
     assert!(cpu.status_flags.get_carry());
@@ -491,12 +502,14 @@ fn test_sty() {
     assert_eq!(cpu.bus.read(0xab).unwrap(), 0x12);
 }
 
-
-
 #[test]
 fn test_subroutines() {
     let mut bus = NesBus::new();
-    bus.load_rom(&[0x20, 0x09, 0x80, 0x20, 0x0c, 0x80, 0x20, 0x12, 0x80, 0xa2, 0x00, 0x60, 0xe8, 0xe0, 0x05, 0xd0, 0xfb, 0x60, 0x00]).unwrap();
+    bus.load_rom(&[
+        0x20, 0x09, 0x80, 0x20, 0x0c, 0x80, 0x20, 0x12, 0x80, 0xa2, 0x00, 0x60, 0xe8, 0xe0, 0x05,
+        0xd0, 0xfb, 0x60, 0x00,
+    ])
+    .unwrap();
     let mut cpu = Cpu::new(Box::new(bus));
     cpu.reset();
     cpu.run().unwrap();

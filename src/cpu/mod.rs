@@ -1,9 +1,9 @@
+mod operations;
 #[cfg(test)]
 mod test;
-mod operations;
 
-use crate::EmulationError;
 use crate::memory::Bus;
+use crate::EmulationError;
 
 const STACK_BASE: u16 = 0x0100;
 const STACK_RESET: u8 = 0xff;
@@ -32,9 +32,7 @@ pub struct CpuStatus {
 
 impl CpuStatus {
     fn new() -> CpuStatus {
-        CpuStatus {
-            status: 0x00,
-        }
+        CpuStatus { status: 0x00 }
     }
 
     fn reset(&mut self) {
@@ -153,6 +151,7 @@ impl CpuStatus {
         }
     }
 }
+
 pub struct Cpu {
     pub register_a: u8,
     pub register_x: u8,
@@ -160,13 +159,12 @@ pub struct Cpu {
     pub register_sp: u8,
     pub register_pc: u16,
     pub status_flags: CpuStatus,
-    pub bus: Box<dyn Bus>,
+    pub bus: Box<dyn Bus + Send + Sync>,
     pub halted: bool,
-    pub running: bool,
 }
 
 impl Cpu {
-    pub fn new(bus: Box<dyn Bus>) -> Cpu {
+    pub fn new(bus: Box<dyn Bus + Send + Sync>) -> Cpu {
         Cpu {
             register_a: 0x00,
             register_x: 0x00,
@@ -176,7 +174,6 @@ impl Cpu {
             status_flags: CpuStatus::new(),
             bus,
             halted: false,
-            running: false,
         }
     }
 
@@ -188,28 +185,27 @@ impl Cpu {
         self.register_pc = self.bus.read_word(0xFFFC).unwrap();
         self.status_flags.reset();
         self.halted = false;
+        self.bus.reset();
     }
 
     pub fn run(&mut self) -> Result<(), EmulationError> {
-        self.running = true;
-        while !self.halted && self.running {
+        while !self.halted {
             let opcode = self.bus.read(self.register_pc)?;
             self.register_pc = self.register_pc.wrapping_add(1);
 
             self.handle_opcode(opcode)?;
         }
-        self.running = false;
         Ok(())
     }
 
-    pub fn step(&mut self) -> Result<(), EmulationError> {
+    pub fn step(&mut self) -> Result<bool, EmulationError> {
         if !self.halted {
             let opcode = self.bus.read(self.register_pc)?;
             self.register_pc = self.register_pc.wrapping_add(1);
 
             self.handle_opcode(opcode)?;
         }
-        Ok(())
+        Ok(!self.halted)
     }
 
     fn halt(&mut self) {

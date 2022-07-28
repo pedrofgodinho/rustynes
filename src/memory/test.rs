@@ -1,6 +1,6 @@
-use egui::Memory;
-use crate::memory::Bus;
 use crate::memory::nes::NesBus;
+use crate::memory::Bus;
+use egui::Memory;
 
 #[test]
 fn test_load_rom() {
