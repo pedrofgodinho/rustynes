@@ -9,6 +9,7 @@ fn main() {
         }),
         ..Default::default()
     };
+
     eframe::run_native(
         "RustyNES",
         options,

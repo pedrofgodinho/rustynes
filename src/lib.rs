@@ -1,6 +1,7 @@
 pub mod cpu;
 pub mod memory;
 pub mod ui;
+pub mod rom;
 
 use thiserror::Error;
 

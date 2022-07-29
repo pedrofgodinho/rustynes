@@ -1,13 +1,14 @@
 use std::sync::{Arc, mpsc};
 use std::sync::mpsc::Sender;
-use std::thread;
+use std::{fs, thread};
 use std::time::Duration;
 use crate::cpu::Cpu;
-use crate::memory::test_game::TestGameBus;
 use eframe::epaint::Rounding;
 use eframe::{egui, CreationContext, Frame};
 use eframe::epaint::mutex::RwLock;
 use egui::{Color32, Context, Key, Rect, Sense, Vec2};
+use crate::memory::nes::NesBus;
+use crate::rom::Rom;
 
 pub struct RustyNesUi {
     cpu: Arc<RwLock<Cpu>>,
@@ -23,7 +24,11 @@ impl RustyNesUi {
     pub fn new(cc: &CreationContext) -> Self {
         cc.egui_ctx.set_visuals(egui::Visuals::dark());
 
-        let bus = TestGameBus::new();
+        let mut rom_bytes = fs::read("roms/nestest.nes").unwrap();
+        rom_bytes[0x400c] = 0x00;
+        let rom = Rom::new(&rom_bytes).unwrap();
+        let bus = NesBus::new(rom);
+
         let mut cpu = Cpu::new(Box::new(bus));
         cpu.reset();
         RustyNesUi {
@@ -53,8 +58,8 @@ impl eframe::App for RustyNesUi {
         self.draw_disassembly_window(ctx);
         self.draw_stack_window(ctx);
         self.draw_memory_write_window(ctx);
-        self.draw_display_window(ctx);
-        self.handle_input(ctx);
+        //self.draw_display_window(ctx);
+        //self.handle_input(ctx);
 
         if self.first_frame {
             self.first_frame = false;
@@ -196,8 +201,8 @@ impl RustyNesUi {
                     .min_col_width(10.0)
                     .show(ui, |ui| {
                         let draw_start = start / 16 * 16;
-                        let draw_end = if end > start + 0x500 {
-                            start + 0x500
+                        let draw_end = if end > 0x800 && end - 0x800 > start {
+                            start + 0x800
                         } else {
                             end
                         };
@@ -217,6 +222,12 @@ impl RustyNesUi {
                             if address % 16 == 15 {
                                 ui.end_row();
                             }
+                        }
+                        if end == 0xFFFF {
+                            match cpu.bus.read(0xFFFF) {
+                                Ok(value) => ui.label(format!("{:02X}", value)),
+                                Err(_) => ui.label("--"),
+                            };
                         }
                         if draw_end != end {
                             ui.label("...");

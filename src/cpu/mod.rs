@@ -170,7 +170,7 @@ impl Cpu {
             register_x: 0x00,
             register_y: 0x00,
             register_sp: STACK_RESET,
-            register_pc: 0x0000,
+            register_pc: bus.read_word(0xFFFC).unwrap(),
             status_flags: CpuStatus::new(),
             bus,
             halted: false,

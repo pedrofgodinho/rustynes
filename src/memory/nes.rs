@@ -1,86 +1,67 @@
 use crate::memory::Bus;
 use crate::EmulationError;
+use crate::rom::Rom;
+
+
+const RAM_START: u16 = 0x0000;
+const RAM_END: u16 = 0x1FFF;
+const PPU_REGISTERS_START: u16 = 0x2000;
+const PPU_REGISTERS_END: u16 = 0x3FFF;
+const ROM_START: u16 = 0x8000;
+const ROM_END: u16 = 0xFFFF;
 
 pub struct NesBus {
-    program_ram: [u8; 0x2000],
-    program_rom: [u8; 0x8000],
+    ram: [u8; 0x2000],
+    rom: Rom,
 }
 
 impl Bus for NesBus {
     fn read(&self, address: u16) -> Result<u8, EmulationError> {
-        let (region, idx) = self.virtual_address_to_slice_and_index(address)?;
-        Ok(region[idx])
+        match address {
+            RAM_START..=RAM_END => {
+                let mirror = (address - RAM_START) & 0b0000_0111_1111_1111;
+                Ok(self.ram[mirror as usize])
+            },
+            PPU_REGISTERS_START..=PPU_REGISTERS_END => {
+                let _mirror = address & 0b0010_0000_0000_0111;
+                todo!("PPU not implemented");
+            },
+            ROM_START..=ROM_END => {
+                Ok(self.rom.read_prg_rom(address - ROM_START))
+            },
+            _ => todo!("Unhandled read from address: {:04X}", address),
+        }
     }
 
     fn write(&mut self, address: u16, value: u8) -> Result<(), EmulationError> {
-        let (region, idx) = self.virtual_address_to_slice_and_index_mut(address)?;
-        region[idx] = value;
-        Ok(())
+        match address {
+            RAM_START..=RAM_END => {
+                let mirror = (address - RAM_START) & 0b00000111_11111111;
+                self.ram[mirror as usize] = value;
+                Ok(())
+            },
+            PPU_REGISTERS_START..=PPU_REGISTERS_END => {
+                let _mirror = address & 0b00100000_00000111;
+                todo!("PPU not implemented");
+            },
+            ROM_START..=ROM_END => {
+                Err(EmulationError::InvalidWrite)
+            },
+            _ => todo!("Unhandled read from address: {:04X}", address),
+        }
     }
 
-    fn read_word(&self, address: u16) -> Result<u16, EmulationError> {
-        Ok(u16::from_le_bytes([
-            self.read(address)?,
-            self.read(address + 1)?,
-        ]))
-    }
-
-    fn write_word(&mut self, address: u16, value: u16) -> Result<(), EmulationError> {
-        self.write(address, value as u8)?;
-        self.write(address + 1, (value >> 8) as u8)?;
-        Ok(())
-    }
 
     fn reset(&mut self) {
-        self.program_ram = [0; 0x2000];
+        self.ram = [0; 0x2000];
     }
 }
 
 impl NesBus {
-    pub fn new() -> NesBus {
+    pub fn new(rom: Rom) -> NesBus {
         NesBus {
-            program_ram: [0; 0x2000],
-            program_rom: [0; 0x8000],
+            ram: [0; 0x2000],
+            rom,
         }
-    }
-
-    pub fn load_rom(&mut self, rom: &[u8]) -> Result<(), EmulationError> {
-        if rom.len() > 0x8000 {
-            return Err(EmulationError::RomTooLarge);
-        }
-        for (i, byte) in rom.iter().enumerate() {
-            self.program_rom[i] = *byte;
-        }
-        self.write_word(0xFFFC, 0x8000).unwrap();
-        Ok(())
-    }
-
-    fn virtual_address_to_slice_and_index_mut(
-        &mut self,
-        address: u16,
-    ) -> Result<(&mut [u8], usize), EmulationError> {
-        match address {
-            0x0000..=0x1fff => Ok((&mut self.program_ram, address as usize)),
-            0x8000..=0xffff => Ok((&mut self.program_rom, address as usize - 0x8000)),
-            //0x8000..=0xffff => Err(EmulationError::InvalidWrite),
-            _ => Err(EmulationError::InvalidAddress(address)),
-        }
-    }
-
-    fn virtual_address_to_slice_and_index(
-        &self,
-        address: u16,
-    ) -> Result<(&[u8], usize), EmulationError> {
-        match address {
-            0x0000..=0x1fff => Ok((&self.program_ram, address as usize)),
-            0x8000..=0xffff => Ok((&self.program_rom, address as usize - 0x8000)),
-            _ => Err(EmulationError::InvalidAddress(address)),
-        }
-    }
-}
-
-impl Default for NesBus {
-    fn default() -> NesBus {
-        NesBus::new()
     }
 }
