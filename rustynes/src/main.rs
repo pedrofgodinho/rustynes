@@ -1,4 +1,5 @@
 use egui::Vec2;
+use emulator_macros::instruction_match;
 use rustynes::ui::RustyNesUi;
 
 fn main() {

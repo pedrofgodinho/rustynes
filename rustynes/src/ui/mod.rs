@@ -7,6 +7,7 @@ use eframe::epaint::Rounding;
 use eframe::{egui, CreationContext, Frame};
 use eframe::epaint::mutex::RwLock;
 use egui::{Color32, Context, Key, Rect, Sense, Vec2};
+use crate::cpu::disassembly::Instruction;
 use crate::memory::nes::NesBus;
 use crate::rom::Rom;
 
@@ -250,11 +251,11 @@ impl RustyNesUi {
                         let cpu = self.cpu.read();
                         let mut pc = cpu.register_pc;
                         for _ in 0..20 {
-                            let def = "???".to_string();
-                            let (disassembly, increment) = cpu.disassemble(pc).unwrap_or((def, 1));
+                            let def = Instruction::default();
+                            let disassembly = cpu.disassemble(pc).unwrap_or(def);
                             ui.label(format!("{:04X}", pc));
-                            ui.label(&disassembly);
-                            pc += increment;
+                            ui.label(disassembly.to_string());
+                            pc += disassembly.length;
                             ui.end_row();
                         }
                     });

@@ -1,6 +1,7 @@
 mod operations;
 #[cfg(test)]
 mod test;
+pub mod disassembly;
 
 use crate::memory::Bus;
 use crate::EmulationError;
@@ -9,7 +10,7 @@ const STACK_BASE: u16 = 0x0100;
 const STACK_RESET: u8 = 0xff;
 
 #[derive(Debug)]
-enum AddressingMode {
+pub enum AddressingMode {
     Immediate,
     ZeroPage,
     ZeroPageX,

@@ -1,0 +1,14 @@
+[package]
+name = "rustynes"
+version = "0.1.0"
+authors = ["Pedro Godinho <pedro.fernandez.godinho@gmail.com>"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+emulator_macros = { path = "../rustynes_macros" }
+thiserror = "1.0.31"
+egui = "0.18.0"
+eframe = "0.18.0"
+rand = "0.8.5"

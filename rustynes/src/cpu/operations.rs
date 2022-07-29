@@ -1,4 +1,6 @@
+use emulator_macros::{disassemble_op, instruction_match};
 use crate::cpu::{AddressingMode, Cpu, STACK_BASE};
+use crate::cpu::disassembly::Instruction;
 use crate::EmulationError;
 
 struct OpResult {
@@ -17,42 +19,130 @@ impl OpResult {
 
 impl Cpu {
     pub(super) fn handle_opcode(&mut self, opcode: u8) -> Result<u8, EmulationError> {
-        macro_rules! match_op {
-            ($to_match:expr; $($instruction:ident: $($opcode:expr => $mode:ident ($bytes:expr)),+;)+) => {
-                return match $to_match {
-                    $($($opcode => {
-                        let op_result = self.$instruction(AddressingMode::$mode)?;
-                        if op_result.increment_pc {
-                            self.register_pc = self.register_pc.wrapping_add($bytes - 1);
-                        }
-                        Ok(op_result.extra_cycles)
-                    },)+)+
-                    _ => Err(EmulationError::InvalidOpcode(opcode)),
-                }
-            };
-        }
-        include!("operations_include.rs");
+        instruction_match!(
+            opcode {
+                adc: 0x69 => Immediate (2), 0x65 => ZeroPage (2), 0x75 => ZeroPageX (2), 0x6D => Absolute (3), 0x7D => AbsoluteX (3), 0x79 => AbsoluteY (3), 0x61 => IndirectX (2), 0x71 => IndirectY (2);
+                and: 0x29 => Immediate (2), 0x25 => ZeroPage (2), 0x35 => ZeroPageX (2), 0x2D => Absolute (3), 0x3D => AbsoluteX (3), 0x39 => AbsoluteY (3), 0x21 => IndirectX (2), 0x31 => IndirectY (2);
+                asl: 0x0A => Accumulator (1), 0x06 => ZeroPage (2), 0x16 => ZeroPageX (2), 0x0E => Absolute (3), 0x1E => AbsoluteX (3);
+                bcc: 0x90 => Relative (2);
+                bcs: 0xB0 => Relative (2);
+                beq: 0xF0 => Relative (2);
+                bit: 0x24 => ZeroPage (2), 0x2C => Absolute (3);
+                bmi: 0x30 => Relative (2);
+                bne: 0xD0 => Relative (2);
+                bpl: 0x10 => Relative (2);
+                brk: 0x00 => Implied (1);
+                bvc: 0x50 => Relative (2);
+                bvs: 0x70 => Relative (2);
+                clc: 0x18 => Implied (1);
+                cld: 0xD8 => Implied (1);
+                cli: 0x58 => Implied (1);
+                clv: 0xB8 => Implied (1);
+                cmp: 0xC9 => Immediate (2), 0xC5 => ZeroPage (2), 0xD5 => ZeroPageX (2), 0xCD => Absolute (3), 0xDD => AbsoluteX (3), 0xD9 => AbsoluteY (3), 0xC1 => IndirectX (2), 0xD1 => IndirectY (2);
+                cpx: 0xE0 => Immediate (2), 0xE4 => ZeroPage (2), 0xEC => Absolute (3);
+                cpy: 0xC0 => Immediate (2), 0xC4 => ZeroPage (2), 0xCC => Absolute (3);
+                dec: 0xC6 => ZeroPage (2), 0xD6 => ZeroPageX (2), 0xCE => Absolute (3), 0xDE => AbsoluteX (3);
+                dex: 0xCA => Implied (1);
+                dey: 0x88 => Implied (1);
+                eor: 0x49 => Immediate (2), 0x45 => ZeroPage (2), 0x55 => ZeroPageX (2), 0x4D => Absolute (3), 0x5D => AbsoluteX (3), 0x59 => AbsoluteY (3), 0x41 => IndirectX (2), 0x51 => IndirectY (2);
+                inc: 0xE6 => ZeroPage (2), 0xF6 => ZeroPageX (2), 0xEE => Absolute (3), 0xFE => AbsoluteX (3);
+                inx: 0xE8 => Implied (1);
+                iny: 0xC8 => Implied (1);
+                jmp: 0x4C => Absolute (3), 0x6C => Indirect  (3);
+                jsr: 0x20 => Absolute (3);
+                lda: 0xA9 => Immediate (2), 0xA5 => ZeroPage (2), 0xB5 => ZeroPageX (2), 0xAD => Absolute (3), 0xBD => AbsoluteX (3), 0xB9 => AbsoluteY (3), 0xA1 => IndirectX (2), 0xB1 => IndirectY (2);
+                ldx: 0xA2 => Immediate (2), 0xA6 => ZeroPage (2), 0xB6 => ZeroPageY (2), 0xAE => Absolute (3), 0xBE => AbsoluteY (3);
+                ldy: 0xA0 => Immediate (2), 0xA4 => ZeroPage (2), 0xB4 => ZeroPageX (2), 0xAC => Absolute (3), 0xBC => AbsoluteX (3);
+                lsr: 0x4A => Accumulator (1), 0x46 => ZeroPage (2), 0x56 => ZeroPageX (2), 0x4E => Absolute (3), 0x5E => AbsoluteX (3);
+                nop: 0xEA => Implied (1);
+                ora: 0x09 => Immediate (2), 0x05 => ZeroPage (2), 0x15 => ZeroPageX (2), 0x0D => Absolute (3), 0x1D => AbsoluteX (3), 0x19 => AbsoluteY (3), 0x01 => IndirectX (2), 0x11 => IndirectY (2);
+                pha: 0x48 => Implied (1);
+                php: 0x08 => Implied (1);
+                pla: 0x68 => Implied (1);
+                plp: 0x28 => Implied (1);
+                rol: 0x2A => Accumulator (1), 0x26 => ZeroPage (2), 0x36 => ZeroPageX (2), 0x2E => Absolute (3), 0x3E => AbsoluteX (3);
+                ror: 0x6A => Accumulator (1), 0x66 => ZeroPage (2), 0x76 => ZeroPageX (2), 0x6E => Absolute (3), 0x7E => AbsoluteX (3);
+                rti: 0x40 => Implied (1);
+                rts: 0x60 => Implied (1);
+                sbc: 0xE9 => Immediate (2), 0xE5 => ZeroPage (2), 0xF5 => ZeroPageX (2), 0xED => Absolute (3), 0xFD => AbsoluteX (3), 0xF9 => AbsoluteY (3), 0xE1 => IndirectX (2), 0xF1 => IndirectY (2);
+                sec: 0x38 => Implied (1);
+                sed: 0xF8 => Implied (1);
+                sei: 0x78 => Implied (1);
+                sta: 0x85 => ZeroPage (2), 0x95 => ZeroPageX (2), 0x8D => Absolute (3), 0x9D => AbsoluteX (3), 0x99 => AbsoluteY (3), 0x81 => IndirectX (2), 0x91 => IndirectY (2);
+                stx: 0x86 => ZeroPage (2), 0x96 => ZeroPageY (2), 0x8E => Absolute (3);
+                sty: 0x84 => ZeroPage (2), 0x94 => ZeroPageX (2), 0x8C => Absolute (3);
+                tax: 0xAA => Implied (1);
+                tay: 0xA8 => Implied (1);
+                tsx: 0xBA => Implied (1);
+                txa: 0x8A => Implied (1);
+                txs: 0x9A => Implied (1);
+                tya: 0x98 => Implied (1);
+            }
+        )
     }
 
-    pub fn disassemble(&self, pc: u16) -> Result<(String, u16), EmulationError> {
+    pub fn disassemble(&self, pc: u16) -> Result<Instruction, EmulationError> {
         let opcode = self.bus.read(pc)?;
-        macro_rules! match_op {
-            ($to_match:expr; $($instruction:ident: $($opcode:expr => $mode:ident ($bytes:expr)),+;)+) => {
-                return match $to_match {
-                    $($($opcode => {
-                        let instruction_name = stringify!($instruction);
-                        match $bytes {
-                            1 => Ok((format!("{}", instruction_name), $bytes)),
-                            2 => Ok((format!("{} {:?} ${:02x}", instruction_name, AddressingMode::$mode, self.bus.read(pc+1).unwrap()), $bytes)),
-                            3 => Ok((format!("{} {:?} ${:04x}", instruction_name, AddressingMode::$mode, self.bus.read_word(pc+1).unwrap()), $bytes)),
-                            _ => Err(EmulationError::InvalidOpcode(opcode)),
-                        }
-                    },)+)+
-                    _ => Err(EmulationError::InvalidOpcode(opcode)),
-                }
-            };
-        }
-        include!("operations_include.rs");
+        disassemble_op!(
+                        opcode {
+                adc: 0x69 => Immediate (2), 0x65 => ZeroPage (2), 0x75 => ZeroPageX (2), 0x6D => Absolute (3), 0x7D => AbsoluteX (3), 0x79 => AbsoluteY (3), 0x61 => IndirectX (2), 0x71 => IndirectY (2);
+                and: 0x29 => Immediate (2), 0x25 => ZeroPage (2), 0x35 => ZeroPageX (2), 0x2D => Absolute (3), 0x3D => AbsoluteX (3), 0x39 => AbsoluteY (3), 0x21 => IndirectX (2), 0x31 => IndirectY (2);
+                asl: 0x0A => Accumulator (1), 0x06 => ZeroPage (2), 0x16 => ZeroPageX (2), 0x0E => Absolute (3), 0x1E => AbsoluteX (3);
+                bcc: 0x90 => Relative (2);
+                bcs: 0xB0 => Relative (2);
+                beq: 0xF0 => Relative (2);
+                bit: 0x24 => ZeroPage (2), 0x2C => Absolute (3);
+                bmi: 0x30 => Relative (2);
+                bne: 0xD0 => Relative (2);
+                bpl: 0x10 => Relative (2);
+                brk: 0x00 => Implied (1);
+                bvc: 0x50 => Relative (2);
+                bvs: 0x70 => Relative (2);
+                clc: 0x18 => Implied (1);
+                cld: 0xD8 => Implied (1);
+                cli: 0x58 => Implied (1);
+                clv: 0xB8 => Implied (1);
+                cmp: 0xC9 => Immediate (2), 0xC5 => ZeroPage (2), 0xD5 => ZeroPageX (2), 0xCD => Absolute (3), 0xDD => AbsoluteX (3), 0xD9 => AbsoluteY (3), 0xC1 => IndirectX (2), 0xD1 => IndirectY (2);
+                cpx: 0xE0 => Immediate (2), 0xE4 => ZeroPage (2), 0xEC => Absolute (3);
+                cpy: 0xC0 => Immediate (2), 0xC4 => ZeroPage (2), 0xCC => Absolute (3);
+                dec: 0xC6 => ZeroPage (2), 0xD6 => ZeroPageX (2), 0xCE => Absolute (3), 0xDE => AbsoluteX (3);
+                dex: 0xCA => Implied (1);
+                dey: 0x88 => Implied (1);
+                eor: 0x49 => Immediate (2), 0x45 => ZeroPage (2), 0x55 => ZeroPageX (2), 0x4D => Absolute (3), 0x5D => AbsoluteX (3), 0x59 => AbsoluteY (3), 0x41 => IndirectX (2), 0x51 => IndirectY (2);
+                inc: 0xE6 => ZeroPage (2), 0xF6 => ZeroPageX (2), 0xEE => Absolute (3), 0xFE => AbsoluteX (3);
+                inx: 0xE8 => Implied (1);
+                iny: 0xC8 => Implied (1);
+                jmp: 0x4C => Absolute (3), 0x6C => Indirect  (3);
+                jsr: 0x20 => Absolute (3);
+                lda: 0xA9 => Immediate (2), 0xA5 => ZeroPage (2), 0xB5 => ZeroPageX (2), 0xAD => Absolute (3), 0xBD => AbsoluteX (3), 0xB9 => AbsoluteY (3), 0xA1 => IndirectX (2), 0xB1 => IndirectY (2);
+                ldx: 0xA2 => Immediate (2), 0xA6 => ZeroPage (2), 0xB6 => ZeroPageY (2), 0xAE => Absolute (3), 0xBE => AbsoluteY (3);
+                ldy: 0xA0 => Immediate (2), 0xA4 => ZeroPage (2), 0xB4 => ZeroPageX (2), 0xAC => Absolute (3), 0xBC => AbsoluteX (3);
+                lsr: 0x4A => Accumulator (1), 0x46 => ZeroPage (2), 0x56 => ZeroPageX (2), 0x4E => Absolute (3), 0x5E => AbsoluteX (3);
+                nop: 0xEA => Implied (1);
+                ora: 0x09 => Immediate (2), 0x05 => ZeroPage (2), 0x15 => ZeroPageX (2), 0x0D => Absolute (3), 0x1D => AbsoluteX (3), 0x19 => AbsoluteY (3), 0x01 => IndirectX (2), 0x11 => IndirectY (2);
+                pha: 0x48 => Implied (1);
+                php: 0x08 => Implied (1);
+                pla: 0x68 => Implied (1);
+                plp: 0x28 => Implied (1);
+                rol: 0x2A => Accumulator (1), 0x26 => ZeroPage (2), 0x36 => ZeroPageX (2), 0x2E => Absolute (3), 0x3E => AbsoluteX (3);
+                ror: 0x6A => Accumulator (1), 0x66 => ZeroPage (2), 0x76 => ZeroPageX (2), 0x6E => Absolute (3), 0x7E => AbsoluteX (3);
+                rti: 0x40 => Implied (1);
+                rts: 0x60 => Implied (1);
+                sbc: 0xE9 => Immediate (2), 0xE5 => ZeroPage (2), 0xF5 => ZeroPageX (2), 0xED => Absolute (3), 0xFD => AbsoluteX (3), 0xF9 => AbsoluteY (3), 0xE1 => IndirectX (2), 0xF1 => IndirectY (2);
+                sec: 0x38 => Implied (1);
+                sed: 0xF8 => Implied (1);
+                sei: 0x78 => Implied (1);
+                sta: 0x85 => ZeroPage (2), 0x95 => ZeroPageX (2), 0x8D => Absolute (3), 0x9D => AbsoluteX (3), 0x99 => AbsoluteY (3), 0x81 => IndirectX (2), 0x91 => IndirectY (2);
+                stx: 0x86 => ZeroPage (2), 0x96 => ZeroPageY (2), 0x8E => Absolute (3);
+                sty: 0x84 => ZeroPage (2), 0x94 => ZeroPageX (2), 0x8C => Absolute (3);
+                tax: 0xAA => Implied (1);
+                tay: 0xA8 => Implied (1);
+                tsx: 0xBA => Implied (1);
+                txa: 0x8A => Implied (1);
+                txs: 0x9A => Implied (1);
+                tya: 0x98 => Implied (1);
+            }
+        )
     }
 
     fn get_operand_address(&self, mode: AddressingMode) -> Result<u16, EmulationError> {
