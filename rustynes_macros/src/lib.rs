@@ -8,8 +8,14 @@ use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 
 /// $TO_MATCH { $($INSTRUCTION: $($OPCODE => MODE ($BYTES)),+)+; }
-struct InstructionSetMatch {
+struct InstructionSetCallMatch {
     to_match: Ident,
+    instructions: InstructionSet,
+}
+
+struct InstructionSetDisassemblyMatch {
+    operands: Ident,
+    address: Ident,
     instructions: InstructionSet,
 }
 
@@ -28,14 +34,30 @@ struct Opcode {
     bytes: Expr,
 }
 
-impl Parse for InstructionSetMatch {
+impl Parse for InstructionSetCallMatch {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let to_match = input.parse()?;
         let content;
         braced!(content in input);
         let instructions = content.parse()?;
-        Ok(InstructionSetMatch {
+        Ok(InstructionSetCallMatch {
             to_match,
+            instructions,
+        })
+    }
+}
+
+impl Parse for InstructionSetDisassemblyMatch {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let address = input.parse()?;
+        input.parse::<Token![,]>()?;
+        let operands= input.parse()?;
+        let content;
+        braced!(content in input);
+        let instructions = content.parse()?;
+        Ok(InstructionSetDisassemblyMatch {
+            operands,
+            address,
             instructions,
         })
     }
@@ -114,8 +136,9 @@ impl Instruction {
             output.extend(quote!{
                 #opcode => {
                     Ok(Instruction {
-                        opcode: #bytes,
-                        operands: vec![self.bus.read(pc+1).unwrap(), self.bus.read(pc+2).unwrap()],
+                        opcode: operands[0],
+                        operands: {vec![operands[1], operands[2]]},
+                        address,
                         instruction: stringify!(#instruction),
                         addressing_mode: AddressingMode::#mode,
                         length: #bytes,
@@ -130,13 +153,13 @@ impl Instruction {
 }
 
 #[proc_macro]
-pub fn instruction_match(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let output = instruction_match2(TokenStream::from(input));
+pub fn call_op(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let output = call_op2(TokenStream::from(input));
     proc_macro::TokenStream::from(output)
 }
 
-fn instruction_match2(input: TokenStream) -> TokenStream {
-    let InstructionSetMatch {
+fn call_op2(input: TokenStream) -> TokenStream {
+    let InstructionSetCallMatch {
         to_match,
         instructions: InstructionSet { instructions },
     } = syn::parse2(input).unwrap();
@@ -164,8 +187,9 @@ pub fn disassemble_op(input: proc_macro::TokenStream) -> proc_macro::TokenStream
 }
 
 fn disassemble_op2(input: TokenStream) -> TokenStream {
-    let InstructionSetMatch {
-        to_match,
+    let InstructionSetDisassemblyMatch {
+        operands,
+        address,
         instructions: InstructionSet { instructions },
     } = syn::parse2(input).unwrap();
 
@@ -176,9 +200,13 @@ fn disassemble_op2(input: TokenStream) -> TokenStream {
     }
 
     let output = quote! {
-        match #to_match {
-            #match_arms
-            _ => Err(EmulationError::InvalidOpcode(opcode)),
+        {
+            let operands = #operands;
+            let address = #address;
+            match operands[0] {
+                #match_arms
+                _ => Err(EmulationError::InvalidOpcode(operands[0])),
+            }
         }
     };
 

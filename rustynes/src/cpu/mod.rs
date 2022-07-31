@@ -1,15 +1,14 @@
 mod operations;
-#[cfg(test)]
-mod test;
 pub mod disassembly;
 
+use crate::cpu::disassembly::Trace;
 use crate::memory::Bus;
 use crate::EmulationError;
 
 const STACK_BASE: u16 = 0x0100;
-const STACK_RESET: u8 = 0xff;
+const STACK_RESET: u8 = 0xfd;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum AddressingMode {
     Immediate,
     ZeroPage,
@@ -31,13 +30,95 @@ pub struct CpuStatus {
     pub status: u8,
 }
 
+
+pub struct Cpu {
+    pub register_a: u8,
+    pub register_x: u8,
+    pub register_y: u8,
+    pub register_sp: u8,
+    pub register_pc: u16,
+    pub status_flags: CpuStatus,
+    pub bus: Box<dyn Bus + Send + Sync>,
+    pub halted: bool,
+}
+
+impl Cpu {
+    pub fn new(bus: Box<dyn Bus + Send + Sync>) -> Cpu {
+        Cpu {
+            register_a: 0x00,
+            register_x: 0x00,
+            register_y: 0x00,
+            register_sp: STACK_RESET,
+            register_pc: bus.read_word(0xFFFC).unwrap(),
+            status_flags: CpuStatus::new(),
+            bus,
+            halted: false,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.register_a = 0x00;
+        self.register_x = 0x00;
+        self.register_y = 0x00;
+        self.register_sp = STACK_RESET;
+        self.register_pc = self.bus.read_word(0xFFFC).unwrap();
+        self.status_flags.reset();
+        self.halted = false;
+        self.bus.reset();
+    }
+
+    pub fn step(&mut self) -> Result<bool, EmulationError> {
+        if !self.halted {
+            let opcode = self.bus.read(self.register_pc)?;
+            self.register_pc = self.register_pc.wrapping_add(1);
+
+            if let Err(e) = self.handle_opcode(opcode) {
+                self.halted = true;
+                return Err(e);
+            }
+            Ok(self.halted)
+        } else {
+            Err(EmulationError::Halted)
+        }
+    }
+
+    pub fn trace(&self) -> Trace {
+        let instruction = self.disassemble(self.register_pc, [
+            self.bus.read(self.register_pc).unwrap_or(0),
+            self.bus.read(self.register_pc.wrapping_add(1)).unwrap_or(0),
+            self.bus.read(self.register_pc.wrapping_add(2)).unwrap_or(0),
+        ]).unwrap_or_default();
+        let addressing_mode = instruction.addressing_mode;
+
+        Trace {
+            address: self.register_pc,
+            instruction,
+            register_a: self.register_a,
+            register_x: self.register_x,
+            register_y: self.register_y,
+            register_sp: self.register_sp,
+            register_pc: self.register_pc,
+            data_at_x: self.bus.read_word(self.register_x as u16).unwrap_or(0),
+            data_at_y: self.bus.read_word(self.register_x as u16).unwrap_or(0),
+            data_address: self.get_operand_address(addressing_mode, self.register_pc.wrapping_add(1)).unwrap_or(0),
+            data_at_address: self.bus.read_word(self.get_operand_address(addressing_mode, self.register_pc.wrapping_add(1)).unwrap_or(0)).unwrap_or(0),
+            status_flags: self.status_flags,
+        }
+    }
+
+    fn halt(&mut self) {
+        self.halted = true;
+    }
+}
+
+
 impl CpuStatus {
     fn new() -> CpuStatus {
-        CpuStatus { status: 0x00 }
+        CpuStatus { status: 0x24 }
     }
 
     fn reset(&mut self) {
-        self.status = 0x00;
+        self.status = 0x24;
     }
 
     pub fn get_negative(&self) -> bool {
@@ -150,66 +231,5 @@ impl CpuStatus {
         } else {
             self.set_negative(false);
         }
-    }
-}
-
-pub struct Cpu {
-    pub register_a: u8,
-    pub register_x: u8,
-    pub register_y: u8,
-    pub register_sp: u8,
-    pub register_pc: u16,
-    pub status_flags: CpuStatus,
-    pub bus: Box<dyn Bus + Send + Sync>,
-    pub halted: bool,
-}
-
-impl Cpu {
-    pub fn new(bus: Box<dyn Bus + Send + Sync>) -> Cpu {
-        Cpu {
-            register_a: 0x00,
-            register_x: 0x00,
-            register_y: 0x00,
-            register_sp: STACK_RESET,
-            register_pc: bus.read_word(0xFFFC).unwrap(),
-            status_flags: CpuStatus::new(),
-            bus,
-            halted: false,
-        }
-    }
-
-    pub fn reset(&mut self) {
-        self.register_a = 0x00;
-        self.register_x = 0x00;
-        self.register_y = 0x00;
-        self.register_sp = STACK_RESET;
-        self.register_pc = self.bus.read_word(0xFFFC).unwrap();
-        self.status_flags.reset();
-        self.halted = false;
-        self.bus.reset();
-    }
-
-    pub fn run(&mut self) -> Result<(), EmulationError> {
-        while !self.halted {
-            let opcode = self.bus.read(self.register_pc)?;
-            self.register_pc = self.register_pc.wrapping_add(1);
-
-            self.handle_opcode(opcode)?;
-        }
-        Ok(())
-    }
-
-    pub fn step(&mut self) -> Result<bool, EmulationError> {
-        if !self.halted {
-            let opcode = self.bus.read(self.register_pc)?;
-            self.register_pc = self.register_pc.wrapping_add(1);
-
-            self.handle_opcode(opcode)?;
-        }
-        Ok(!self.halted)
-    }
-
-    fn halt(&mut self) {
-        self.halted = true;
     }
 }

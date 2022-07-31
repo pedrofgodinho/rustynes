@@ -24,12 +24,12 @@ impl Bus for NesBus {
             },
             PPU_REGISTERS_START..=PPU_REGISTERS_END => {
                 let _mirror = address & 0b0010_0000_0000_0111;
-                todo!("PPU not implemented");
+                Err(EmulationError::InvalidRead)
             },
             ROM_START..=ROM_END => {
                 Ok(self.rom.read_prg_rom(address - ROM_START))
             },
-            _ => todo!("Unhandled read from address: {:04X}", address),
+            _ => Err(EmulationError::InvalidRead),
         }
     }
 
@@ -42,12 +42,12 @@ impl Bus for NesBus {
             },
             PPU_REGISTERS_START..=PPU_REGISTERS_END => {
                 let _mirror = address & 0b00100000_00000111;
-                todo!("PPU not implemented");
+                Err(EmulationError::InvalidWrite)
             },
             ROM_START..=ROM_END => {
                 Err(EmulationError::InvalidWrite)
             },
-            _ => todo!("Unhandled read from address: {:04X}", address),
+            _ => Err(EmulationError::InvalidWrite),
         }
     }
 

@@ -22,9 +22,9 @@ pub enum Mirroring {
 
 pub struct Rom {
     prg_rom: [u8; 0x8000],
-    chr_rom: Vec<u8>,
-    mapper: u8,
-    mirroring: Mirroring,
+    _chr_rom: Vec<u8>,
+    _mapper: u8,
+    _mirroring: Mirroring,
     mirror_prg_rom: bool,
 }
 
@@ -70,9 +70,9 @@ impl Rom {
 
         Ok(Rom{
             prg_rom,
-            chr_rom: raw[chr_rom_start..(chr_rom_start + chr_rom_size)].to_vec(),
-            mapper,
-            mirroring,
+            _chr_rom: raw[chr_rom_start..(chr_rom_start + chr_rom_size)].to_vec(),
+            _mapper: mapper,
+            _mirroring: mirroring,
             mirror_prg_rom,
         })
     }

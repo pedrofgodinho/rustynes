@@ -1,6 +1,7 @@
 use std::sync::{Arc, mpsc};
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::{Receiver, Sender};
 use std::{fs, thread};
+use std::fs::File;
 use std::time::Duration;
 use crate::cpu::Cpu;
 use eframe::epaint::Rounding;
@@ -14,6 +15,7 @@ use crate::rom::Rom;
 pub struct RustyNesUi {
     cpu: Arc<RwLock<Cpu>>,
     stop_tx: Option<Sender<()>>,
+    halted_rx: Option<Receiver<()>>,
     memory_start_address: String,
     memory_end_address: String,
     memory_write_address: String,
@@ -35,6 +37,7 @@ impl RustyNesUi {
         RustyNesUi {
             cpu: Arc::new(RwLock::new(cpu)),
             stop_tx: None,
+            halted_rx: None,
             memory_start_address: "0000".to_string(),
             memory_end_address: "0100".to_string(),
             memory_write_address: "0000".to_string(),
@@ -161,13 +164,20 @@ impl RustyNesUi {
             .resizable(false)
             .show(ctx, |ui| {
                 if self.stop_tx.is_some() {
-                    if ui.button("Stop").clicked() {
+                    if self.halted_rx.as_ref().unwrap().try_recv().is_ok() {
+                        self.stop_tx = None;
+                        self.halted_rx = None;
+                    } else if ui.button("Stop").clicked() {
                         self.stop_tx.as_ref().unwrap().send(()).unwrap();
                         self.stop_tx = None;
+                        self.halted_rx = None;
                     }
                 } else {
                     if ui.button("Run").clicked() {
-                        self.create_run_thread();
+                        self.create_run_thread(false);
+                    }
+                    if ui.button("Run and save trace").clicked() {
+                        self.create_run_thread(true);
                     }
                     if ui.button("Step").clicked() {
                         self.cpu.write().step();
@@ -252,7 +262,11 @@ impl RustyNesUi {
                         let mut pc = cpu.register_pc;
                         for _ in 0..20 {
                             let def = Instruction::default();
-                            let disassembly = cpu.disassemble(pc).unwrap_or(def);
+                            let disassembly = cpu.disassemble(pc, [
+                                cpu.bus.read(pc).unwrap_or(0),
+                                cpu.bus.read(pc.wrapping_add(1)).unwrap_or(0),
+                                cpu.bus.read(pc.wrapping_add(2)).unwrap_or(0),
+                            ]).unwrap_or(def);
                             ui.label(format!("{:04X}", pc));
                             ui.label(disassembly.to_string());
                             pc += disassembly.length;
@@ -387,19 +401,42 @@ impl RustyNesUi {
         }
     }
 
-    fn create_run_thread(&mut self) {
+    fn create_run_thread(&mut self, save_trace: bool) {
         let cpu = self.cpu.clone();
         let (stop_tx, stop_rx) = mpsc::channel();
+        let (halted_tx, halted_rx) = mpsc::channel();
         self.stop_tx = Some(stop_tx);
+        self.halted_rx = Some(halted_rx);
         thread::spawn(move || {
-            loop {
+            let mut trace_vec = Vec::new();
+            'main: loop {
                 if stop_rx.try_recv().is_ok() {
                     break;
                 }
-                for i in 0..300 {
-                    cpu.write().step();
+                for _ in 0..300 {
+                    let mut cpu_lock = cpu.write();
+                    if save_trace {
+                        trace_vec.push(cpu_lock.trace());
+                    }
+                    match cpu_lock.step() {
+                        Ok(halted) => {
+                            if halted {
+                                halted_tx.send(()).unwrap();
+                                break 'main;
+                            }
+                        }
+                        Err(_) => {
+                            halted_tx.send(()).unwrap();
+                            break 'main;
+                        }
+                    }
                 }
                 thread::sleep(Duration::from_nanos(1_000_000_000 / 60));
+            }
+            if save_trace {
+                let mut to_write = trace_vec.iter().map(|trace| trace.to_string()).collect::<Vec<String>>().join("\n");
+                to_write.push('\n');
+                fs::write("log", to_write).unwrap();
             }
         });
     }

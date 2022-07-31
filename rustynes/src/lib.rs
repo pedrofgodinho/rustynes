@@ -13,8 +13,14 @@ pub enum EmulationError {
     PcOutOfBounds(u16),
     #[error("Rom to large to fit in memory")]
     RomTooLarge,
-    #[error("Tried to write to read-only memory")]
+    #[error("Invalid read")]
+    InvalidRead,
+    #[error("Invalid write")]
     InvalidWrite,
+    #[error("Addressing mode does not refer to memory address")]
+    UnsuportedAddressingMode,
+    #[error("Cannot step while halted")]
+    Halted,
 
     #[error("Invalid address")]
     InvalidAddress(u16),
