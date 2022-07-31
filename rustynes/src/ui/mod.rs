@@ -1,7 +1,6 @@
 use std::sync::{Arc, mpsc};
 use std::sync::mpsc::{Receiver, Sender};
 use std::{fs, thread};
-use std::fs::File;
 use std::time::Duration;
 use crate::cpu::Cpu;
 use eframe::epaint::Rounding;
